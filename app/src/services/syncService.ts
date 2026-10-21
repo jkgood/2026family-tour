@@ -3,11 +3,18 @@ import { OrderItem, getOrders, saveOrders } from '../store/orderStore';
 const STORAGE_SYNC_CONFIG_KEY = 'family_trip_sync_config_v1';
 const STORAGE_SYNC_ENABLED_KEY = 'family_trip_sync_enabled_v1';
 
-// 預設的 Firebase Realtime Database 網址。
-// 可在 Vercel 的環境變數設定 VITE_FIREBASE_DB_URL，或直接填在下方引號內。
-// 例如：https://xxxx-default-rtdb.asia-southeast1.firebasedatabase.app
-const DEFAULT_FIREBASE_URL: string =
-  ((import.meta.env.VITE_FIREBASE_DB_URL as string | undefined) || '').trim();
+// Firebase 專案 familytour-3f6c5 的 Realtime Database。
+// 資料庫所在地區不同，網址網域會不同，所以列出可能的網址，連線時自動偵測哪一個可用。
+const DB_NAME = 'familytour-3f6c5-default-rtdb';
+const CANDIDATE_URLS: string[] = [
+  `https://${DB_NAME}.asia-southeast1.firebasedatabase.app`, // 新加坡
+  `https://${DB_NAME}.firebaseio.com`, // 美國 (us-central1)
+  `https://${DB_NAME}.europe-west1.firebasedatabase.app` // 比利時
+];
+
+// 也可在 Vercel 設定環境變數 VITE_FIREBASE_DB_URL 覆蓋預設網址
+const ENV_URL: string = ((import.meta.env.VITE_FIREBASE_DB_URL as string | undefined) || '').trim();
+const DEFAULT_FIREBASE_URL: string = ENV_URL || CANDIDATE_URLS[0];
 
 const DEFAULT_ROOM_KEY = '2026-family-tour';
 
@@ -39,6 +46,7 @@ export function getSyncConfig(): SyncConfig {
 export function saveSyncConfig(cfg: SyncConfig): void {
   try {
     localStorage.setItem(STORAGE_SYNC_CONFIG_KEY, JSON.stringify(cfg));
+    resolvedBase = null;
     window.dispatchEvent(new Event('sync_config_changed'));
   } catch (err) {
     console.error('Failed to save sync config', err);
@@ -61,6 +69,37 @@ export function setCloudSyncEnabled(enabled: boolean): void {
   } catch (err) {
     console.error('Failed to toggle sync', err);
   }
+}
+
+// 找出實際可連線的資料庫網址（結果會快取，設定變更後重新偵測）
+let resolvedBase: string | null = null;
+
+async function resolveBaseUrl(): Promise<string | null> {
+  if (resolvedBase) return resolvedBase;
+
+  const cfg = getSyncConfig();
+  const configured = (cfg.firebaseDatabaseUrl || '').trim().replace(/\/$/, '');
+  if (!configured) return null;
+
+  // 使用者自訂了其他網址：直接使用，不做偵測
+  if (!CANDIDATE_URLS.includes(configured) && configured !== ENV_URL.replace(/\/$/, '')) {
+    resolvedBase = configured;
+    return resolvedBase;
+  }
+
+  const candidates = Array.from(new Set([configured, ...CANDIDATE_URLS]));
+  for (const base of candidates) {
+    try {
+      const res = await fetch(`${base}/.json?shallow=true`);
+      if (res.ok) {
+        resolvedBase = base;
+        return resolvedBase;
+      }
+    } catch {
+      // try next
+    }
+  }
+  return null;
 }
 
 // 產生 LINE 點餐分享碼 (輕量字串，家人可貼至 LINE 群組)
@@ -155,7 +194,8 @@ export function startCloudSyncLoop(): () => void {
     const cfg = getSyncConfig();
     if (!cfg.firebaseDatabaseUrl) return;
 
-    const base = cfg.firebaseDatabaseUrl.replace(/\/$/, '');
+    const base = await resolveBaseUrl();
+    if (!base) return;
     const url = `${base}/tours/${encodeURIComponent(cfg.roomKey)}/orders.json`;
 
     try {
@@ -189,7 +229,8 @@ export async function pushOrdersToCloud(orders: OrderItem[]): Promise<boolean> {
   const cfg = getSyncConfig();
   if (!cfg.firebaseDatabaseUrl) return false;
 
-  const base = cfg.firebaseDatabaseUrl.replace(/\/$/, '');
+  const base = await resolveBaseUrl();
+  if (!base) return false;
   const url = `${base}/tours/${encodeURIComponent(cfg.roomKey)}/orders.json`;
 
   try {

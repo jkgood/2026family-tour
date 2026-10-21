@@ -9,7 +9,7 @@ import { ShareAppModal } from './components/ShareAppModal';
 import { ToastContainer } from './components/Toast';
 import { getLocalUser, setLocalUser } from './store/orderStore';
 import { useFontMode } from './store/settingStore';
-import { isCloudSyncEnabled, startCloudSyncLoop } from './services/syncService';
+import { isCloudSyncEnabled, startCloudSyncLoop, getSyncStatus, SyncStatus } from './services/syncService';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<'itinerary' | 'order' | 'stats'>('itinerary');
@@ -18,6 +18,7 @@ export function App() {
   const [syncModalOpen, setSyncModalOpen] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [isCloudSync, setIsCloudSync] = useState(() => isCloudSyncEnabled());
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(() => getSyncStatus());
   const [fontMode, toggleFontMode] = useFontMode();
   const [selectedMealKey, setSelectedMealKey] = useState<string>('1031_lunch');
 
@@ -31,17 +32,24 @@ export function App() {
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
-  // 監聽雲端同步設定狀態
+  // 監聽雲端同步設定與連線狀態
   useEffect(() => {
     const checkSync = () => setIsCloudSync(isCloudSyncEnabled());
+    const checkStatus = () => setSyncStatus(getSyncStatus());
     window.addEventListener('sync_config_changed', checkSync);
+    window.addEventListener('sync_status_changed', checkStatus);
     // 啟動雲端即時同步背景循環
     const cleanup = startCloudSyncLoop();
     return () => {
       window.removeEventListener('sync_config_changed', checkSync);
+      window.removeEventListener('sync_status_changed', checkStatus);
       cleanup();
     };
   }, []);
+
+  // 同步按鈕只在「連線失敗」或「同步被關閉」時顯示
+  const syncFailed = isCloudSync && syncStatus === 'error';
+  const showSyncButton = syncFailed || !isCloudSync;
 
   const handleSelectUser = (name: string) => {
     setCurrentUser(name);
@@ -71,6 +79,7 @@ export function App() {
               苗栗 • 2026/10/31 - 11/01
             </div>
             <h1 className="header-title">2026 苗栗家庭旅行</h1>
+            <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '2px' }}>{__APP_VERSION__}</div>
           </div>
 
           {/* 右上角操作按鈕群組 */}
@@ -90,19 +99,22 @@ export function App() {
               <span>{fontMode === 'large' ? '大字模式' : '大字'}</span>
             </button>
 
-            {/* 雲端同步狀態 */}
-            <button
-              className="user-badge"
-              onClick={() => setSyncModalOpen(true)}
-              title="雲端即時同步與家族點餐碼分享"
-              style={{
-                background: isCloudSync ? '#10b981' : 'rgba(255, 255, 255, 0.2)',
-                borderColor: isCloudSync ? '#34d399' : 'rgba(255, 255, 255, 0.3)'
-              }}
-            >
-              <Cloud size={15} />
-              <span>{isCloudSync ? '同步中' : '同步'}</span>
-            </button>
+            {/* 雲端同步：只在連線失敗或被關閉時顯示 */}
+            {showSyncButton && (
+              <button
+                className="user-badge"
+                onClick={() => setSyncModalOpen(true)}
+                title={syncFailed ? '雲端同步連線失敗，點此查看' : '雲端同步已關閉，點此開啟'}
+                style={{
+                  background: syncFailed ? '#ef4444' : 'rgba(255, 255, 255, 0.2)',
+                  borderColor: syncFailed ? '#fca5a5' : 'rgba(255, 255, 255, 0.3)',
+                  color: syncFailed ? 'white' : undefined
+                }}
+              >
+                <Cloud size={15} />
+                <span>{syncFailed ? '同步失敗' : '未同步'}</span>
+              </button>
+            )}
 
             {/* 分享 App QR Code */}
             <button

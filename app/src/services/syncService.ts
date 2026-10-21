@@ -3,6 +3,14 @@ import { OrderItem, getOrders, saveOrders } from '../store/orderStore';
 const STORAGE_SYNC_CONFIG_KEY = 'family_trip_sync_config_v1';
 const STORAGE_SYNC_ENABLED_KEY = 'family_trip_sync_enabled_v1';
 
+// 預設的 Firebase Realtime Database 網址。
+// 可在 Vercel 的環境變數設定 VITE_FIREBASE_DB_URL，或直接填在下方引號內。
+// 例如：https://xxxx-default-rtdb.asia-southeast1.firebasedatabase.app
+const DEFAULT_FIREBASE_URL: string =
+  ((import.meta.env.VITE_FIREBASE_DB_URL as string | undefined) || '').trim();
+
+const DEFAULT_ROOM_KEY = '2026-family-tour';
+
 export interface SyncConfig {
   firebaseDatabaseUrl?: string; // e.g. https://xxxx-default-rtdb.firebaseio.com/
   roomKey: string; // e.g. 2026-family-tour
@@ -11,13 +19,20 @@ export interface SyncConfig {
 export function getSyncConfig(): SyncConfig {
   try {
     const raw = localStorage.getItem(STORAGE_SYNC_CONFIG_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const saved = JSON.parse(raw) as SyncConfig;
+      return {
+        // 本機沒填網址時，自動套用預設網址
+        firebaseDatabaseUrl: saved.firebaseDatabaseUrl || DEFAULT_FIREBASE_URL,
+        roomKey: saved.roomKey || DEFAULT_ROOM_KEY
+      };
+    }
   } catch {
     // ignore
   }
   return {
-    firebaseDatabaseUrl: '',
-    roomKey: '2026-family-tour'
+    firebaseDatabaseUrl: DEFAULT_FIREBASE_URL,
+    roomKey: DEFAULT_ROOM_KEY
   };
 }
 
@@ -30,11 +45,12 @@ export function saveSyncConfig(cfg: SyncConfig): void {
   }
 }
 
+// 預設啟用雲端同步；只有使用者手動關閉過才會是 false
 export function isCloudSyncEnabled(): boolean {
   try {
-    return localStorage.getItem(STORAGE_SYNC_ENABLED_KEY) === 'true';
+    return localStorage.getItem(STORAGE_SYNC_ENABLED_KEY) !== 'false';
   } catch {
-    return false;
+    return true;
   }
 }
 

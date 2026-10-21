@@ -8,7 +8,7 @@ interface Props {
 
 export const ShareAppModal: React.FC<Props> = ({ onClose }) => {
   const [copied, setCopied] = useState(false);
-  const currentUrl = typeof window !== 'undefined' ? window.location.href : 'https://hyprohcc.github.io/2026family-tour/';
+  const currentUrl = typeof window !== 'undefined' ? window.location.href : 'https://jkgood.github.io/2026family-tour/';
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=12&data=${encodeURIComponent(
     currentUrl
   )}`;

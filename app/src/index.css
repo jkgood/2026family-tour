@@ -25,7 +25,7 @@ body {
   background-color: var(--bg);
   color: var(--text);
   line-height: 1.5;
-  padding-bottom: 90px;
+  padding-bottom: 96px;
 }
 
 /* Container */
@@ -49,6 +49,13 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* 右上角按鈕群組：字級放大時自動換行，不會被擠出畫面 */
+.header-top > div:last-child {
+  flex-wrap: wrap;
 }
 
 .header-title {
@@ -90,6 +97,7 @@ body {
   box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
 }
 
+/* 底部導覽列字級有上限，避免放大後蓋住內容 */
 .nav-item {
   display: flex;
   flex-direction: column;
@@ -98,12 +106,17 @@ body {
   background: none;
   border: none;
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: clamp(12px, 0.75rem, 14px);
   font-weight: 500;
   cursor: pointer;
   padding: 6px 12px;
   border-radius: 12px;
   transition: all 0.2s;
+}
+
+.nav-item svg {
+  width: clamp(22px, 1.4rem, 26px);
+  height: clamp(22px, 1.4rem, 26px);
 }
 
 .nav-item.active {
@@ -179,6 +192,8 @@ body {
   background: white;
   width: 100%;
   max-width: 460px;
+  max-height: 90vh;
+  overflow-y: auto;
   border-radius: 20px;
   padding: 24px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
@@ -213,70 +228,27 @@ body {
 }
 
 /* =========================================
-   長輩大字模式 (Elderly-Friendly Large Mode)
+   長輩大字模式：四段字級
+   畫面上的文字多半以 rem 計算，所以直接放大 html 的基準字級，
+   整個 App 的字、按鈕、間距就會一起等比例放大。
+   1 標準 16px → 2 大 19px → 3 特大 22px → 4 超大 26px
    ========================================= */
 :root[data-font-mode="large"] {
-  --radius: 18px;
+  font-size: 19px;
 }
 
-:root[data-font-mode="large"] body {
-  font-size: 18px;
-  line-height: 1.6;
+:root[data-font-mode="xlarge"] {
+  font-size: 22px;
 }
 
-:root[data-font-mode="large"] .header-title {
-  font-size: 1.45rem;
+:root[data-font-mode="xxlarge"] {
+  font-size: 26px;
 }
 
-:root[data-font-mode="large"] .btn {
-  font-size: 1.1rem;
-  padding: 12px 20px;
-  min-height: 48px;
-}
-
-:root[data-font-mode="large"] .btn-sm {
-  font-size: 0.95rem;
-  padding: 8px 14px;
-  min-height: 40px;
-}
-
-:root[data-font-mode="large"] .tag {
-  font-size: 0.85rem;
-  padding: 6px 12px;
-}
-
-:root[data-font-mode="large"] .dish-card h4,
-:root[data-font-mode="large"] .itinerary-card-title {
-  font-size: 1.3rem !important;
-}
-
-:root[data-font-mode="large"] .dish-price {
-  font-size: 1.35rem !important;
-  font-weight: 800 !important;
-}
-
-:root[data-font-mode="large"] .qty-btn {
-  width: 44px !important;
-  height: 44px !important;
-  font-size: 1.25rem !important;
-}
-
-:root[data-font-mode="large"] .qty-display {
-  font-size: 1.25rem !important;
-  min-width: 32px !important;
-}
-
-:root[data-font-mode="large"] .bottom-nav {
-  padding: 10px 14px;
-}
-
-:root[data-font-mode="large"] .nav-item {
-  font-size: 0.9rem;
-}
-
-:root[data-font-mode="large"] .nav-item svg {
-  width: 26px;
-  height: 26px;
+:root[data-font-mode="large"] .btn,
+:root[data-font-mode="xlarge"] .btn,
+:root[data-font-mode="xxlarge"] .btn {
+  min-height: 44px;
 }
 
 /* Toast 提示 */
@@ -301,4 +273,3 @@ body {
   from { opacity: 0; transform: translate(-50%, 10px); }
   to { opacity: 1; transform: translate(-50%, 0); }
 }
-

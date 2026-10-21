@@ -8,7 +8,7 @@ import { SyncModal } from './components/SyncModal';
 import { ShareAppModal } from './components/ShareAppModal';
 import { ToastContainer } from './components/Toast';
 import { getLocalUser, setLocalUser } from './store/orderStore';
-import { useFontMode } from './store/settingStore';
+import { useFontMode, getFontLevel } from './store/settingStore';
 import { isCloudSyncEnabled, startCloudSyncLoop, getSyncStatus, SyncStatus } from './services/syncService';
 
 export function App() {
@@ -51,6 +51,9 @@ export function App() {
   const syncFailed = isCloudSync && syncStatus === 'error';
   const showSyncButton = syncFailed || !isCloudSync;
 
+  // 字級：1 標準 / 2 大 / 3 特大 / 4 超大
+  const fontLevel = getFontLevel(fontMode);
+
   const handleSelectUser = (name: string) => {
     setCurrentUser(name);
     setLocalUser(name);
@@ -84,19 +87,19 @@ export function App() {
 
           {/* 右上角操作按鈕群組 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            {/* 長輩大字模式切換 */}
+            {/* 長輩大字模式：點一下切換下一段字級（1→2→3→4→1） */}
             <button
               className="user-badge"
               onClick={() => toggleFontMode()}
-              title={fontMode === 'large' ? '切換為標準字體' : '切換為長輩大字模式'}
+              title={`目前字級 ${fontLevel}/4，點擊切換下一段`}
               style={{
-                background: fontMode === 'large' ? '#f59e0b' : 'rgba(255, 255, 255, 0.2)',
-                borderColor: fontMode === 'large' ? '#fbbf24' : 'rgba(255, 255, 255, 0.3)',
-                fontWeight: fontMode === 'large' ? 700 : 500
+                background: fontLevel > 1 ? '#f59e0b' : 'rgba(255, 255, 255, 0.2)',
+                borderColor: fontLevel > 1 ? '#fbbf24' : 'rgba(255, 255, 255, 0.3)',
+                fontWeight: fontLevel > 1 ? 700 : 500
               }}
             >
               <Type size={15} />
-              <span>{fontMode === 'large' ? '大字模式' : '大字'}</span>
+              <span>大字 {fontLevel}/4</span>
             </button>
 
             {/* 雲端同步：只在連線失敗或被關閉時顯示 */}

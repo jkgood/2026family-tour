@@ -35,6 +35,9 @@ export const OrderView: React.FC<Props> = ({
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showLiveSummary, setShowLiveSummary] = useState(true);
 
+  // 火鍋分頁：個人套餐 / 單點
+  const [hotpotTab, setHotpotTab] = useState<'set' | 'extras'>('set');
+
   // 火鍋客製化彈窗狀態
   const [hotpotModalOpen, setHotpotModalOpen] = useState(false);
   const [selectedMeat, setSelectedMeat] = useState<{ id: string; name: string; price: number } | null>(null);
@@ -45,6 +48,15 @@ export const OrderView: React.FC<Props> = ({
   const allOrders = useOrders();
   const currentMealOrders = allOrders.filter((o) => o.mealKey === selectedMealKey);
   const myMealOrders = currentMealOrders.filter((o) => o.userName === currentUser);
+
+  // 火鍋分頁上的已點份數
+  const extrasIds = new Set(HOTPOT_EXTRAS.map((d) => d.id));
+  const extrasCount = currentMealOrders
+    .filter((o) => extrasIds.has(o.itemId))
+    .reduce((sum, o) => sum + o.quantity, 0);
+  const setCount = currentMealOrders
+    .filter((o) => !extrasIds.has(o.itemId))
+    .reduce((sum, o) => sum + o.quantity, 0);
 
   // 取得所有分類
   const categories = ['全部', ...(currentMeal.dishes ? Array.from(new Set(currentMeal.dishes.map((d) => d.category))) : [])];
@@ -351,102 +363,165 @@ export const OrderView: React.FC<Props> = ({
       {currentMeal.hotpot ? (
         /* 火鍋模式 */
         <div>
-          <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h4 style={{ fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Flame size={18} color="#dc2626" />
-              個人套餐選擇 (含肉品、菜盤、附餐)
-            </h4>
-            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>點擊下方套餐進行自選</span>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '10px' }}>
-            {currentMeal.hotpot.meats.map((meat) => {
-              const myCount = myMealOrders.filter((o) => o.itemId === meat.id).reduce((sum, o) => sum + o.quantity, 0);
-              const totalCount = currentMealOrders.filter((o) => o.itemId === meat.id).reduce((sum, o) => sum + o.quantity, 0);
-              const meatOrders = currentMealOrders.filter((o) => o.itemId === meat.id);
-
+          {/* 個人套餐 / 單點 分頁 */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '6px',
+              padding: '4px',
+              background: '#e2e8f0',
+              borderRadius: '12px',
+              marginBottom: '14px'
+            }}
+          >
+            {(
+              [
+                { key: 'set', label: '🍲 個人套餐', count: setCount },
+                { key: 'extras', label: '🍖 單點加點', count: extrasCount }
+              ] as const
+            ).map((tab) => {
+              const active = hotpotTab === tab.key;
               return (
-                <div
-                  key={meat.id}
-                  className="card"
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setHotpotTab(tab.key)}
                   style={{
-                    padding: '14px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between'
+                    padding: '9px 6px',
+                    border: 'none',
+                    borderRadius: '9px',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem',
+                    fontWeight: 700,
+                    background: active ? '#ffffff' : 'transparent',
+                    color: active ? '#1d4ed8' : '#475569',
+                    boxShadow: active ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
+                    transition: 'all 0.15s'
                   }}
                 >
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: '1rem', color: '#0f172a' }}>{meat.name}</div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#dc2626', marginTop: '4px' }}>
-                      ${meat.price}
-                    </div>
-
-                    {/* 即時顯示誰點了這份火鍋 (需求三) */}
-                    <div style={{ marginTop: '10px' }}>
-                      {totalCount > 0 ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>
-                            整桌已點 {totalCount} 份：
-                          </div>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                            {meatOrders.map((ord) => {
-                              const isMe = ord.userName === currentUser;
-                              return (
-                                <div
-                                  key={ord.id}
-                                  style={{
-                                    fontSize: '0.72rem',
-                                    background: isMe ? '#eff6ff' : '#f8fafc',
-                                    color: isMe ? '#1d4ed8' : '#334155',
-                                    border: isMe ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
-                                    borderRadius: '6px',
-                                    padding: '3px 6px',
-                                    lineHeight: 1.3
-                                  }}
-                                >
-                                  <strong>{ord.userName}</strong> x{ord.quantity}
-                                  {ord.details && (
-                                    <div style={{ color: '#64748b', fontSize: '0.7rem' }}>
-                                      {ord.details}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : (
-                        <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>尚未有人點選</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
-                    <button
-                      className="btn btn-primary btn-sm"
-                      onClick={() => {
-                        setSelectedMeat(meat);
-                        setHotpotModalOpen(true);
+                  {tab.label}
+                  {tab.count > 0 && (
+                    <span
+                      style={{
+                        marginLeft: '6px',
+                        fontSize: '0.72rem',
+                        background: active ? '#2563eb' : '#94a3b8',
+                        color: 'white',
+                        borderRadius: '10px',
+                        padding: '1px 7px'
                       }}
                     >
-                      <Plus size={14} />
-                      選擇湯底與副食 {myCount > 0 ? `(我已點 ${myCount})` : ''}
-                    </button>
-                  </div>
-                </div>
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
               );
             })}
           </div>
 
-          {/* 單點加點 (現場補單) */}
-          <HotpotExtras
-            dishes={HOTPOT_EXTRAS}
-            orders={currentMealOrders}
-            currentUser={currentUser}
-            onAdd={handleAddDish}
-            onDecrease={handleDecreaseDish}
-          />
+          {hotpotTab === 'set' ? (
+            <div>
+              <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h4 style={{ fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Flame size={18} color="#dc2626" />
+                  個人套餐選擇 (含肉品、菜盤、附餐)
+                </h4>
+                <span style={{ fontSize: '0.8rem', color: '#64748b' }}>點擊下方套餐進行自選</span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '10px' }}>
+                {currentMeal.hotpot.meats.map((meat) => {
+                  const myCount = myMealOrders.filter((o) => o.itemId === meat.id).reduce((sum, o) => sum + o.quantity, 0);
+                  const totalCount = currentMealOrders.filter((o) => o.itemId === meat.id).reduce((sum, o) => sum + o.quantity, 0);
+                  const meatOrders = currentMealOrders.filter((o) => o.itemId === meat.id);
+
+                  return (
+                    <div
+                      key={meat.id}
+                      className="card"
+                      style={{
+                        padding: '14px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '1rem', color: '#0f172a' }}>{meat.name}</div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#dc2626', marginTop: '4px' }}>
+                          ${meat.price}
+                        </div>
+
+                        {/* 即時顯示誰點了這份火鍋 (需求三) */}
+                        <div style={{ marginTop: '10px' }}>
+                          {totalCount > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>
+                                整桌已點 {totalCount} 份：
+                              </div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                {meatOrders.map((ord) => {
+                                  const isMe = ord.userName === currentUser;
+                                  return (
+                                    <div
+                                      key={ord.id}
+                                      style={{
+                                        fontSize: '0.72rem',
+                                        background: isMe ? '#eff6ff' : '#f8fafc',
+                                        color: isMe ? '#1d4ed8' : '#334155',
+                                        border: isMe ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
+                                        borderRadius: '6px',
+                                        padding: '3px 6px',
+                                        lineHeight: 1.3
+                                      }}
+                                    >
+                                      <strong>{ord.userName}</strong> x{ord.quantity}
+                                      {ord.details && (
+                                        <div style={{ color: '#64748b', fontSize: '0.7rem' }}>
+                                          {ord.details}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ) : (
+                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>尚未有人點選</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => {
+                            setSelectedMeat(meat);
+                            setHotpotModalOpen(true);
+                          }}
+                        >
+                          <Plus size={14} />
+                          選擇湯底與副食 {myCount > 0 ? `(我已點 ${myCount})` : ''}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            /* 單點加點 (現場補單) */
+            <div style={{ marginTop: '-24px' }}>
+              <HotpotExtras
+                dishes={HOTPOT_EXTRAS}
+                orders={currentMealOrders}
+                currentUser={currentUser}
+                onAdd={handleAddDish}
+                onDecrease={handleDecreaseDish}
+              />
+            </div>
+          )}
         </div>
       ) : (
         /* 合菜模式 */

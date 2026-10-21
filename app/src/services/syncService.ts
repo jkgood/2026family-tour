@@ -23,6 +23,33 @@ export interface SyncConfig {
   roomKey: string; // e.g. 2026-family-tour
 }
 
+// ---- 連線狀態（供畫面判斷是否顯示「同步失敗」）----
+export type SyncStatus = 'unknown' | 'ok' | 'error';
+
+let syncStatus: SyncStatus = 'unknown';
+let failCount = 0;
+
+export function getSyncStatus(): SyncStatus {
+  return syncStatus;
+}
+
+function setSyncStatus(next: SyncStatus): void {
+  if (next === syncStatus) return;
+  syncStatus = next;
+  window.dispatchEvent(new Event('sync_status_changed'));
+}
+
+function markSuccess(): void {
+  failCount = 0;
+  setSyncStatus('ok');
+}
+
+// 連續失敗 2 次才判定為失敗，避免網路瞬間抖動就跳出提示
+function markFailure(): void {
+  failCount += 1;
+  if (failCount >= 2) setSyncStatus('error');
+}
+
 export function getSyncConfig(): SyncConfig {
   try {
     const raw = localStorage.getItem(STORAGE_SYNC_CONFIG_KEY);
@@ -47,6 +74,7 @@ export function saveSyncConfig(cfg: SyncConfig): void {
   try {
     localStorage.setItem(STORAGE_SYNC_CONFIG_KEY, JSON.stringify(cfg));
     resolvedBase = null;
+    failCount = 0;
     window.dispatchEvent(new Event('sync_config_changed'));
   } catch (err) {
     console.error('Failed to save sync config', err);
@@ -65,6 +93,7 @@ export function isCloudSyncEnabled(): boolean {
 export function setCloudSyncEnabled(enabled: boolean): void {
   try {
     localStorage.setItem(STORAGE_SYNC_ENABLED_KEY, enabled ? 'true' : 'false');
+    failCount = 0;
     window.dispatchEvent(new Event('sync_config_changed'));
   } catch (err) {
     console.error('Failed to toggle sync', err);
@@ -195,13 +224,20 @@ export function startCloudSyncLoop(): () => void {
     if (!cfg.firebaseDatabaseUrl) return;
 
     const base = await resolveBaseUrl();
-    if (!base) return;
+    if (!base) {
+      markFailure();
+      return;
+    }
     const url = `${base}/tours/${encodeURIComponent(cfg.roomKey)}/orders.json`;
 
     try {
       const res = await fetch(url);
-      if (!res.ok) return;
+      if (!res.ok) {
+        markFailure();
+        return;
+      }
       const remoteOrders: OrderItem[] | null = await res.json();
+      markSuccess();
       if (Array.isArray(remoteOrders)) {
         // 合併或覆蓋
         const local = getOrders();
@@ -211,7 +247,8 @@ export function startCloudSyncLoop(): () => void {
         }
       }
     } catch {
-      // 離線靜默處理
+      // 離線：計入失敗次數
+      markFailure();
     }
   };
 
@@ -230,7 +267,10 @@ export async function pushOrdersToCloud(orders: OrderItem[]): Promise<boolean> {
   if (!cfg.firebaseDatabaseUrl) return false;
 
   const base = await resolveBaseUrl();
-  if (!base) return false;
+  if (!base) {
+    markFailure();
+    return false;
+  }
   const url = `${base}/tours/${encodeURIComponent(cfg.roomKey)}/orders.json`;
 
   try {
@@ -239,8 +279,14 @@ export async function pushOrdersToCloud(orders: OrderItem[]): Promise<boolean> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(orders)
     });
+    if (res.ok) {
+      markSuccess();
+    } else {
+      markFailure();
+    }
     return res.ok;
   } catch {
+    markFailure();
     return false;
   }
 }

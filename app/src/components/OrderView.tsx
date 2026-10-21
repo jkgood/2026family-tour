@@ -10,6 +10,8 @@ import {
   ChevronUp
 } from 'lucide-react';
 import { MEALS_DATA, DishItem } from '../data/tripData';
+import { HOTPOT_EXTRAS } from '../data/hotpotExtras';
+import { HotpotExtras } from './HotpotExtras';
 import { addOrder, useOrders, updateOrderQty, getLocalUser } from '../store/orderStore';
 import confetti from 'canvas-confetti';
 
@@ -436,6 +438,15 @@ export const OrderView: React.FC<Props> = ({
               );
             })}
           </div>
+
+          {/* 單點加點 (現場補單) */}
+          <HotpotExtras
+            dishes={HOTPOT_EXTRAS}
+            orders={currentMealOrders}
+            currentUser={currentUser}
+            onAdd={handleAddDish}
+            onDecrease={handleDecreaseDish}
+          />
         </div>
       ) : (
         /* 合菜模式 */

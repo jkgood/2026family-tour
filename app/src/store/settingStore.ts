@@ -2,12 +2,19 @@ import { useState, useEffect } from 'react';
 
 const STORAGE_FONT_KEY = 'family_trip_font_mode_v1';
 
-export type FontMode = 'normal' | 'large';
+// 四段字級：標準 → 大 → 特大 → 超大（實際放大倍率在 index.css）
+export type FontMode = 'normal' | 'large' | 'xlarge' | 'xxlarge';
+
+const FONT_MODES: FontMode[] = ['normal', 'large', 'xlarge', 'xxlarge'];
+
+export function getFontLevel(mode: FontMode): number {
+  return FONT_MODES.indexOf(mode) + 1;
+}
 
 export function getFontMode(): FontMode {
   try {
-    const val = localStorage.getItem(STORAGE_FONT_KEY);
-    return val === 'large' ? 'large' : 'normal';
+    const val = localStorage.getItem(STORAGE_FONT_KEY) as FontMode | null;
+    return val && FONT_MODES.includes(val) ? val : 'normal';
   } catch {
     return 'normal';
   }
@@ -38,18 +45,25 @@ export function useFontMode(): [FontMode, (mode?: FontMode) => void] {
       document.documentElement.dataset.fontMode = current;
     };
 
-    window.addEventListener('font_mode_changed', update);
-    window.addEventListener('storage', (e) => {
+    const onStorage = (e: StorageEvent) => {
       if (e.key === STORAGE_FONT_KEY) update();
-    });
+    };
+
+    window.addEventListener('font_mode_changed', update);
+    window.addEventListener('storage', onStorage);
 
     return () => {
       window.removeEventListener('font_mode_changed', update);
+      window.removeEventListener('storage', onStorage);
     };
   }, []);
 
+  // 沒指定字級時：依序切換到下一段，超大之後回到標準
   const toggle = (nextMode?: FontMode) => {
-    const target = nextMode !== undefined ? nextMode : mode === 'normal' ? 'large' : 'normal';
+    const target =
+      nextMode !== undefined
+        ? nextMode
+        : FONT_MODES[(FONT_MODES.indexOf(mode) + 1) % FONT_MODES.length];
     setFontMode(target);
     setMode(target);
   };

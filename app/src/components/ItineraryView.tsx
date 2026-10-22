@@ -2,11 +2,15 @@ import React, { useState } from 'react';
 import { Clock, MapPin, Phone, ExternalLink, Compass, Copy, Check } from 'lucide-react';
 import { ITINERARY_DATA, DayPlan, ItineraryItem } from '../data/tripData';
 import { PhoneCallModal } from './PhoneCallModal';
+import { WeatherStrip } from './WeatherStrip';
 import { showToast } from './Toast';
 
 interface Props {
   onGoToOrder?: (mealKey: string) => void;
 }
+
+// 各天對應的實際日期（供天氣預報查詢）
+const DAY_DATES = ['2026-10-31', '2026-11-01'];
 
 export const ItineraryView: React.FC<Props> = ({ onGoToOrder }) => {
   const [callingItem, setCallingItem] = useState<{ title: string; phone: string } | null>(null);
@@ -92,6 +96,9 @@ export const ItineraryView: React.FC<Props> = ({ onGoToOrder }) => {
             </div>
             <div style={{ fontSize: '0.85rem', color: '#64748b' }}>{day.title}</div>
           </div>
+
+          {/* 當地早中晚天氣預報 */}
+          {DAY_DATES[dayIdx] && <WeatherStrip date={DAY_DATES[dayIdx]} />}
 
           {/* 時間軸列表 */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>

@@ -44,18 +44,22 @@ export const StatsView: React.FC<Props> = ({
   });
   const orderers = Object.keys(ordererQtyMap).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
 
-  // 切換餐廳時重設勾選狀態
+  // 切換餐廳時重設狀態
   useEffect(() => {
     setSelectedUsers(null);
   }, [selectedMealKey]);
 
-  // 有點餐者變動時：預設全選；新出現的人自動勾上
+  // 有點餐者變動時：預設全選；新出現的人自動納入
   useEffect(() => {
     setSelectedUsers((prev) => {
       if (orderers.length === 0) return [];
       if (prev === null) return [...orderers];
       const stillThere = prev.filter((u) => orderers.includes(u));
       const newcomers = orderers.filter((u) => !prev.includes(u));
+      // 單人模式下，其他人新點餐不要自動加入，避免畫面突然跳動
+      if (prev.length > 0 && prev.length < orderers.length) {
+        return stillThere.length > 0 ? stillThere : [...orderers];
+      }
       return [...stillThere, ...newcomers];
     });
   }, [orderers.join('|')]);
@@ -63,7 +67,7 @@ export const StatsView: React.FC<Props> = ({
   const activeUsers = selectedUsers ?? orderers;
   const filteredOrders = mealOrders.filter((o) => activeUsers.includes(o.userName));
 
-  // 依「菜品」彙總統計（只算被勾選的點菜者）
+  // 依「菜品」彙總統計（只算被選取的點菜者）
   interface DishSummary {
     key: string;
     itemId: string;
@@ -102,29 +106,31 @@ export const StatsView: React.FC<Props> = ({
 
   const dishSummaries = Object.values(dishMap);
 
-  // 金額計算（無小數點，依勾選範圍）
+  // 金額計算（無小數點，依選取範圍）
   const subtotal = Math.round(filteredOrders.reduce((sum, o) => sum + o.price * o.quantity, 0));
   const serviceChargeRate = (currentMeal.serviceChargePercent || 0) / 100;
   const serviceCharge = Math.round(subtotal * serviceChargeRate);
   const grandTotal = Math.round(subtotal + serviceCharge);
   const totalPortions = filteredOrders.reduce((sum, o) => sum + o.quantity, 0);
 
-  const toggleUser = (name: string) => {
+  // 點人名：只看這個人；若目前已經只看這個人，再點一次回到全部
+  const soloUser = (name: string) => {
     setSelectedUsers((prev) => {
       const cur = prev ?? orderers;
-      if (cur.includes(name)) return cur.filter((u) => u !== name);
-      return [...cur, name];
+      if (cur.length === 1 && cur[0] === name) return [...orderers];
+      return [name];
     });
   };
 
   const selectAllUsers = () => setSelectedUsers([...orderers]);
-  const clearAllUsers = () => setSelectedUsers([]);
 
-  // 複製文字清單分享到 LINE / 家族群組（依目前勾選範圍）
+  const isSoloMode = activeUsers.length > 0 && activeUsers.length < orderers.length;
+
+  // 複製文字清單分享到 LINE / 家族群組（依目前選取範圍）
   const handleCopySummary = () => {
     let text = `【${currentMeal.restaurant}】家族點餐統計\n`;
     text += `用餐時段：${currentMeal.timing}\n`;
-    if (activeUsers.length > 0 && activeUsers.length < orderers.length) {
+    if (isSoloMode) {
       text += `納入計算：${activeUsers.join('、')}\n`;
     }
     text += `\n📋【點菜清單】\n`;
@@ -166,7 +172,7 @@ export const StatsView: React.FC<Props> = ({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
+          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
           gap: '8px',
           marginBottom: '16px'
         }}
@@ -185,7 +191,8 @@ export const StatsView: React.FC<Props> = ({
                 color: isSelected ? '#1d4ed8' : '#475569',
                 cursor: 'pointer',
                 textAlign: 'center',
-                transition: 'all 0.15s'
+                transition: 'all 0.15s',
+                minWidth: 0
               }}
             >
               <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>
@@ -193,7 +200,7 @@ export const StatsView: React.FC<Props> = ({
                 {meal.dateKey === '1031_dinner' && '10/31 晚餐'}
                 {meal.dateKey === '1101_lunch' && '11/01 午餐'}
               </div>
-              <div style={{ fontSize: '0.85rem', fontWeight: 700, marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 700, marginTop: '2px', overflowWrap: 'anywhere' }}>
                 {meal.restaurant.split('（')[0]}
               </div>
             </button>
@@ -209,8 +216,16 @@ export const StatsView: React.FC<Props> = ({
           color: 'white'
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            flexWrap: 'wrap',
+            gap: '8px'
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
             <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
               {currentMeal.timing} • 結算統計
             </span>
@@ -219,7 +234,9 @@ export const StatsView: React.FC<Props> = ({
             </h3>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>總結算金額</span>
+            <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+              {isSoloMode ? `${activeUsers.join('、')} 的金額` : '總結算金額'}
+            </span>
             <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#38bdf8' }}>
               ${grandTotal}
             </div>
@@ -233,7 +250,7 @@ export const StatsView: React.FC<Props> = ({
             paddingTop: '12px',
             borderTop: '1px solid #334155',
             display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
+            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
             gap: '8px',
             textAlign: 'center',
             fontSize: '0.85rem'
@@ -257,7 +274,7 @@ export const StatsView: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* 納入計算的點菜者（勾選篩選） */}
+        {/* 點人名：只看這個人的菜單與金額 */}
         {orderers.length > 0 && (
           <div
             style={{
@@ -271,43 +288,30 @@ export const StatsView: React.FC<Props> = ({
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '6px',
                 marginBottom: '8px'
               }}
             >
               <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600 }}>
-                納入計算的點菜者
+                點人名只看他的菜（再點一次回到全部）
               </span>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  type="button"
-                  onClick={selectAllUsers}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: '#38bdf8',
-                    fontSize: '0.75rem',
-                    cursor: 'pointer',
-                    padding: 0,
-                    fontWeight: 600
-                  }}
-                >
-                  全選
-                </button>
-                <button
-                  type="button"
-                  onClick={clearAllUsers}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: '#94a3b8',
-                    fontSize: '0.75rem',
-                    cursor: 'pointer',
-                    padding: 0
-                  }}
-                >
-                  全不選
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={selectAllUsers}
+                style={{
+                  background: isSoloMode ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
+                  border: isSoloMode ? '1px solid #38bdf8' : '1px solid transparent',
+                  borderRadius: '999px',
+                  color: '#38bdf8',
+                  fontSize: '0.75rem',
+                  cursor: 'pointer',
+                  padding: '3px 10px',
+                  fontWeight: 600
+                }}
+              >
+                看全部
+              </button>
             </div>
             <div
               style={{
@@ -317,57 +321,44 @@ export const StatsView: React.FC<Props> = ({
               }}
             >
               {orderers.map((name) => {
-                const checked = (selectedUsers ?? orderers).includes(name);
+                const active = activeUsers.includes(name);
                 const qty = ordererQtyMap[name] || 0;
                 return (
-                  <label
+                  <button
                     key={name}
+                    type="button"
+                    onClick={() => soloUser(name)}
+                    aria-pressed={active}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '6px',
-                      background: checked ? 'rgba(56, 189, 248, 0.15)' : 'rgba(148, 163, 184, 0.12)',
-                      border: checked ? '1px solid #38bdf8' : '1px solid transparent',
+                      background: active ? 'rgba(56, 189, 248, 0.15)' : 'rgba(148, 163, 184, 0.12)',
+                      border: active ? '1px solid #38bdf8' : '1px solid transparent',
                       borderRadius: '999px',
-                      padding: '5px 10px 5px 8px',
+                      padding: '6px 12px',
                       cursor: 'pointer',
                       fontSize: '0.8rem',
-                      color: checked ? '#e0f2fe' : '#94a3b8',
-                      fontWeight: checked ? 600 : 500,
-                      userSelect: 'none'
+                      color: active ? '#e0f2fe' : '#94a3b8',
+                      fontWeight: active ? 600 : 500,
+                      userSelect: 'none',
+                      textAlign: 'left',
+                      maxWidth: '100%'
                     }}
                   >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleUser(name)}
-                      style={{
-                        width: '14px',
-                        height: '14px',
-                        accentColor: '#38bdf8',
-                        cursor: 'pointer',
-                        margin: 0
-                      }}
-                    />
-                    <span>
+                    <span style={{ overflowWrap: 'anywhere' }}>
                       {name}
                       <span style={{ opacity: 0.75, fontWeight: 500 }}> ({qty}份)</span>
                     </span>
-                  </label>
+                  </button>
                 );
               })}
             </div>
-            {activeUsers.length === 0 && (
-              <div style={{ marginTop: '8px', fontSize: '0.75rem', color: '#fbbf24' }}>
-                請至少勾選一位點菜者，金額與清單才會顯示
-              </div>
-            )}
           </div>
         )}
 
         {/* 複製與重設操作列 */}
         <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <button
               onClick={handleCopySummary}
               className="btn btn-primary"
@@ -421,6 +412,8 @@ export const StatsView: React.FC<Props> = ({
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '6px',
               marginBottom: '10px'
             }}
           >
@@ -462,11 +455,13 @@ export const StatsView: React.FC<Props> = ({
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'flex-start',
+                      flexWrap: 'wrap',
+                      gap: '8px',
                       paddingBottom: '8px',
                       borderBottom: '1px solid #f1f5f9'
                     }}
                   >
-                    <div>
+                    <div style={{ minWidth: 0, flex: '1 1 120px' }}>
                       <div style={{ fontWeight: 700, fontSize: '1rem', color: '#0f172a' }}>
                         {dish.itemName}
                       </div>
@@ -524,13 +519,15 @@ export const StatsView: React.FC<Props> = ({
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: '6px',
                           background: '#f8fafc',
                           padding: '6px 10px',
                           borderRadius: '8px',
                           fontSize: '0.85rem'
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', minWidth: 0 }}>
                           <span
                             style={{
                               fontWeight: 700,

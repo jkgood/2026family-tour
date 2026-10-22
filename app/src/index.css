@@ -269,6 +269,41 @@ body {
   min-height: 44px;
 }
 
+/* =========================================
+   大字模式防超出：內容區一律允許換行、欄位可收縮。
+   只在 large / xlarge / xxlarge 生效，標準字級不受影響。
+   ========================================= */
+:root:is([data-font-mode="large"], [data-font-mode="xlarge"], [data-font-mode="xxlarge"]) .container,
+:root:is([data-font-mode="large"], [data-font-mode="xlarge"], [data-font-mode="xxlarge"]) .card {
+  min-width: 0;
+}
+
+:root:is([data-font-mode="large"], [data-font-mode="xlarge"], [data-font-mode="xxlarge"]) .container * {
+  overflow-wrap: anywhere;
+}
+
+:root:is([data-font-mode="large"], [data-font-mode="xlarge"], [data-font-mode="xxlarge"]) .container div[style*="display: flex"] {
+  flex-wrap: wrap;
+}
+
+:root:is([data-font-mode="large"], [data-font-mode="xlarge"], [data-font-mode="xxlarge"]) .container div[style*="display: flex"] > div {
+  min-width: 0;
+}
+
+:root:is([data-font-mode="large"], [data-font-mode="xlarge"], [data-font-mode="xxlarge"]) .container button {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+
+:root:is([data-font-mode="large"], [data-font-mode="xlarge"], [data-font-mode="xxlarge"]) .container div[style*="repeat(3, 1fr)"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
+:root:is([data-font-mode="large"], [data-font-mode="xlarge"], [data-font-mode="xxlarge"]) .container div[style*="1fr 1fr"] {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+}
+
 /* Toast 提示 */
 .toast-notice {
   position: fixed;

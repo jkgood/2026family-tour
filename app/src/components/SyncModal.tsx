@@ -32,7 +32,11 @@ export const SyncModal: React.FC<Props> = ({ currentUser, onClose }) => {
   };
 
   const handleSaveConfig = () => {
-    saveSyncConfig(config);
+    const error = saveSyncConfig(config);
+    if (error) {
+      showToast('⚠️ ' + error);
+      return;
+    }
     showToast('✅ 雲端連線設定已儲存！');
   };
 
@@ -174,13 +178,13 @@ export const SyncModal: React.FC<Props> = ({ currentUser, onClose }) => {
           </div>
 
           <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '10px' }}>
-            開啟後，任何人在手機上點餐，所有人的畫面將在 1 秒內自動同步更新。
+            開啟後，任何人在手機上點餐，所有人的畫面將在數秒內自動同步更新。
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <div>
               <div style={{ fontSize: '0.78rem', color: '#475569', marginBottom: '3px' }}>
-                Firebase Realtime Database 網址：
+                Firebase Realtime Database 網址（僅限 https 的 Firebase 網址）：
               </div>
               <input
                 type="text"
@@ -199,11 +203,12 @@ export const SyncModal: React.FC<Props> = ({ currentUser, onClose }) => {
 
             <div>
               <div style={{ fontSize: '0.78rem', color: '#475569', marginBottom: '3px' }}>
-                房間密鑰 (大家需填相同)：
+                房間密鑰 (大家需填相同；僅限英數字、_、-，建議使用不易猜到的長字串)：
               </div>
               <input
                 type="text"
                 value={config.roomKey}
+                maxLength={64}
                 onChange={(e) => setConfig({ ...config, roomKey: e.target.value })}
                 style={{
                   width: '100%',
@@ -247,7 +252,7 @@ export const SyncModal: React.FC<Props> = ({ currentUser, onClose }) => {
                 <strong>免費 3 步建立即時同步庫：</strong>
                 <ol style={{ paddingLeft: '18px', marginTop: '4px' }}>
                   <li>前往 <a href="https://console.firebase.google.com/" target="_blank" rel="noreferrer">Firebase Console</a> 免費新增專案。</li>
-                  <li>左側選「Build」→「Realtime Database」→ 建立資料庫（規則選測試模式，或將 read/write 設為 true）。</li>
+                  <li>左側選「Build」→「Realtime Database」→ 建立資料庫，並在「規則」頁貼上專案 docs/firebase-rules.json 的內容（請勿使用 read/write 全開的測試模式）。</li>
                   <li>複製資料庫頂部的 URL 網址，貼至上方欄位並點儲存即可！</li>
                 </ol>
               </div>

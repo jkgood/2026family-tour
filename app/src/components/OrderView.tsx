@@ -47,7 +47,7 @@ export const OrderView: React.FC<Props> = ({
 
   const currentMeal = MEALS_DATA.find((m) => m.dateKey === selectedMealKey) || MEALS_DATA[0];
 
-  // 換餐廳時，回到該餐的預設分頁（有「招牌菜／合菜」就停在最前面那個）
+  // 換餐廳時，回到該餐的預設分頁（有 pinned 分類如「合菜」就停在最前面那個）
   useEffect(() => {
     setActiveCategory(getDefaultCategory(currentMeal.dateKey));
     setSearchTerm('');
@@ -66,13 +66,13 @@ export const OrderView: React.FC<Props> = ({
     .filter((o) => !extrasIds.has(o.itemId))
     .reduce((sum, o) => sum + o.quantity, 0);
 
-  // 本餐所有菜色 = 額外加入的（招牌菜／合菜）+ 原有菜單
+  // 本餐所有菜色 = 額外加入的 + 原有菜單
   const mealDishes: DishItem[] = [
     ...(EXTRA_DISHES[currentMeal.dateKey] || []),
     ...(currentMeal.dishes || [])
   ];
 
-  // 分類分頁：先放「招牌菜、合菜」，再來是「全部」與其他分類
+  // 分類分頁：先放 pinned（合菜），再來是「全部」與其他分類
   const dataCategories = Array.from(new Set(mealDishes.map((d) => d.category)));
   const pinnedCategories = PINNED_CATEGORIES.filter((c) => dataCategories.includes(c));
   const otherCategories = dataCategories.filter((c) => !pinnedCategories.includes(c));

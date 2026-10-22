@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   UtensilsCrossed,
   Trash2,
@@ -31,11 +31,39 @@ export const StatsView: React.FC<Props> = ({
   onGoToOrder
 }) => {
   const [copied, setCopied] = useState(false);
+  // 納入金額／清單計算的點菜者（null = 尚未初始化，之後會設成全部）
+  const [selectedUsers, setSelectedUsers] = useState<string[] | null>(null);
   const currentMeal = MEALS_DATA.find((m) => m.dateKey === selectedMealKey) || MEALS_DATA[0];
   const allOrders = useOrders();
   const mealOrders = allOrders.filter((o) => o.mealKey === selectedMealKey);
 
-  // 依「菜品」彙總統計 (整桌清單)
+  // 本餐實際有點過的人 + 每人份數
+  const ordererQtyMap: { [name: string]: number } = {};
+  mealOrders.forEach((o) => {
+    ordererQtyMap[o.userName] = (ordererQtyMap[o.userName] || 0) + o.quantity;
+  });
+  const orderers = Object.keys(ordererQtyMap).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+
+  // 切換餐廳時重設勾選狀態
+  useEffect(() => {
+    setSelectedUsers(null);
+  }, [selectedMealKey]);
+
+  // 有點餐者變動時：預設全選；新出現的人自動勾上
+  useEffect(() => {
+    setSelectedUsers((prev) => {
+      if (orderers.length === 0) return [];
+      if (prev === null) return [...orderers];
+      const stillThere = prev.filter((u) => orderers.includes(u));
+      const newcomers = orderers.filter((u) => !prev.includes(u));
+      return [...stillThere, ...newcomers];
+    });
+  }, [orderers.join('|')]);
+
+  const activeUsers = selectedUsers ?? orderers;
+  const filteredOrders = mealOrders.filter((o) => activeUsers.includes(o.userName));
+
+  // 依「菜品」彙總統計（只算被勾選的點菜者）
   interface DishSummary {
     key: string;
     itemId: string;
@@ -49,7 +77,7 @@ export const StatsView: React.FC<Props> = ({
   }
 
   const dishMap: { [key: string]: DishSummary } = {};
-  mealOrders.forEach((o) => {
+  filteredOrders.forEach((o) => {
     const key = o.itemId + (o.details ? `_${o.details}` : '');
     if (!dishMap[key]) {
       dishMap[key] = {
@@ -74,26 +102,45 @@ export const StatsView: React.FC<Props> = ({
 
   const dishSummaries = Object.values(dishMap);
 
-  // 金額計算（無小數點）
-  const subtotal = Math.round(mealOrders.reduce((sum, o) => sum + o.price * o.quantity, 0));
+  // 金額計算（無小數點，依勾選範圍）
+  const subtotal = Math.round(filteredOrders.reduce((sum, o) => sum + o.price * o.quantity, 0));
   const serviceChargeRate = (currentMeal.serviceChargePercent || 0) / 100;
   const serviceCharge = Math.round(subtotal * serviceChargeRate);
   const grandTotal = Math.round(subtotal + serviceCharge);
+  const totalPortions = filteredOrders.reduce((sum, o) => sum + o.quantity, 0);
 
-  // 複製文字清單分享到 LINE / 家族群組（無個人金額統計，無小數點）
+  const toggleUser = (name: string) => {
+    setSelectedUsers((prev) => {
+      const cur = prev ?? orderers;
+      if (cur.includes(name)) return cur.filter((u) => u !== name);
+      return [...cur, name];
+    });
+  };
+
+  const selectAllUsers = () => setSelectedUsers([...orderers]);
+  const clearAllUsers = () => setSelectedUsers([]);
+
+  // 複製文字清單分享到 LINE / 家族群組（依目前勾選範圍）
   const handleCopySummary = () => {
     let text = `【${currentMeal.restaurant}】家族點餐統計\n`;
-    text += `用餐時段：${currentMeal.timing}\n\n`;
-    text += `📋【整桌點菜清單】\n`;
-    dishSummaries.forEach((d) => {
-      const who = Object.entries(d.orderedBy)
-        .map(([u, q]) => `${u}x${q}`)
-        .join(', ');
-      text += `• ${d.itemName} x ${d.totalQty} (點餐: ${who})\n`;
-      if (d.detailsList.length > 0) {
-        text += `  └ ${d.detailsList.join(' / ')}\n`;
-      }
-    });
+    text += `用餐時段：${currentMeal.timing}\n`;
+    if (activeUsers.length > 0 && activeUsers.length < orderers.length) {
+      text += `納入計算：${activeUsers.join('、')}\n`;
+    }
+    text += `\n📋【點菜清單】\n`;
+    if (dishSummaries.length === 0) {
+      text += `（目前無納入計算的品項）\n`;
+    } else {
+      dishSummaries.forEach((d) => {
+        const who = Object.entries(d.orderedBy)
+          .map(([u, q]) => `${u}x${q}`)
+          .join(', ');
+        text += `• ${d.itemName} x ${d.totalQty} (點餐: ${who})\n`;
+        if (d.detailsList.length > 0) {
+          text += `  └ ${d.detailsList.join(' / ')}\n`;
+        }
+      });
+    }
 
     text += `\n💰【金額統計】\n`;
     text += `菜色原價：$${subtotal}\n`;
@@ -113,7 +160,6 @@ export const StatsView: React.FC<Props> = ({
       clearMealOrders(selectedMealKey);
     }
   };
-
   return (
     <div>
       {/* 餐廳切換 Tab */}
@@ -206,10 +252,118 @@ export const StatsView: React.FC<Props> = ({
           <div>
             <div style={{ color: '#94a3b8' }}>已點品項</div>
             <div style={{ fontWeight: 700, marginTop: '2px' }}>
-              {dishSummaries.reduce((sum, d) => sum + d.totalQty, 0)} 份
+              {totalPortions} 份
             </div>
           </div>
         </div>
+
+        {/* 納入計算的點菜者（勾選篩選） */}
+        {orderers.length > 0 && (
+          <div
+            style={{
+              marginTop: '16px',
+              paddingTop: '12px',
+              borderTop: '1px solid #334155'
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '8px'
+              }}
+            >
+              <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600 }}>
+                納入計算的點菜者
+              </span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={selectAllUsers}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#38bdf8',
+                    fontSize: '0.75rem',
+                    cursor: 'pointer',
+                    padding: 0,
+                    fontWeight: 600
+                  }}
+                >
+                  全選
+                </button>
+                <button
+                  type="button"
+                  onClick={clearAllUsers}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#94a3b8',
+                    fontSize: '0.75rem',
+                    cursor: 'pointer',
+                    padding: 0
+                  }}
+                >
+                  全不選
+                </button>
+              </div>
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '8px'
+              }}
+            >
+              {orderers.map((name) => {
+                const checked = (selectedUsers ?? orderers).includes(name);
+                const qty = ordererQtyMap[name] || 0;
+                return (
+                  <label
+                    key={name}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      background: checked ? 'rgba(56, 189, 248, 0.15)' : 'rgba(148, 163, 184, 0.12)',
+                      border: checked ? '1px solid #38bdf8' : '1px solid transparent',
+                      borderRadius: '999px',
+                      padding: '5px 10px 5px 8px',
+                      cursor: 'pointer',
+                      fontSize: '0.8rem',
+                      color: checked ? '#e0f2fe' : '#94a3b8',
+                      fontWeight: checked ? 600 : 500,
+                      userSelect: 'none'
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleUser(name)}
+                      style={{
+                        width: '14px',
+                        height: '14px',
+                        accentColor: '#38bdf8',
+                        cursor: 'pointer',
+                        margin: 0
+                      }}
+                    />
+                    <span>
+                      {name}
+                      <span style={{ opacity: 0.75, fontWeight: 500 }}> ({qty}份)</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            {activeUsers.length === 0 && (
+              <div style={{ marginTop: '8px', fontSize: '0.75rem', color: '#fbbf24' }}>
+                請至少勾選一位點菜者，金額與清單才會顯示
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 複製與重設操作列 */}
         <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -281,7 +435,7 @@ export const StatsView: React.FC<Props> = ({
               }}
             >
               <Edit3 size={18} color="#2563eb" />
-              最後點單菜單編輯（共 {dishSummaries.length} 種品項、{mealOrders.reduce((sum, o) => sum + o.quantity, 0)} 份）
+              最後點單菜單編輯（共 {dishSummaries.length} 種品項、{totalPortions} 份）
             </h4>
             <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
               可在此增減數量或刪除品項

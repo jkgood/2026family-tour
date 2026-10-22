@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Plus,
   Minus,
@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { MEALS_DATA, DishItem } from '../data/tripData';
 import { HOTPOT_EXTRAS } from '../data/hotpotExtras';
+import { PINNED_CATEGORIES, EXTRA_DISHES, EXTRA_MEAL_NOTES, getDefaultCategory } from '../data/mealExtras';
 import { HotpotExtras } from './HotpotExtras';
 import { addOrder, useOrders, updateOrderQty, getLocalUser } from '../store/orderStore';
 import confetti from 'canvas-confetti';
@@ -30,7 +31,7 @@ export const OrderView: React.FC<Props> = ({
   onSelectMealKey,
   onGoToStats
 }) => {
-  const [activeCategory, setActiveCategory] = useState<string>('全部');
+  const [activeCategory, setActiveCategory] = useState<string>(() => getDefaultCategory(selectedMealKey));
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showLiveSummary, setShowLiveSummary] = useState(true);
@@ -45,6 +46,13 @@ export const OrderView: React.FC<Props> = ({
   const [selectedSide, setSelectedSide] = useState<string>('白飯');
 
   const currentMeal = MEALS_DATA.find((m) => m.dateKey === selectedMealKey) || MEALS_DATA[0];
+
+  // 換餐廳時，回到該餐的預設分頁（有「招牌菜／合菜」就停在最前面那個）
+  useEffect(() => {
+    setActiveCategory(getDefaultCategory(currentMeal.dateKey));
+    setSearchTerm('');
+  }, [currentMeal.dateKey]);
+
   const allOrders = useOrders();
   const currentMealOrders = allOrders.filter((o) => o.mealKey === selectedMealKey);
   const myMealOrders = currentMealOrders.filter((o) => o.userName === currentUser);
@@ -58,10 +66,19 @@ export const OrderView: React.FC<Props> = ({
     .filter((o) => !extrasIds.has(o.itemId))
     .reduce((sum, o) => sum + o.quantity, 0);
 
-  // 取得所有分類
-  const categories = ['全部', ...(currentMeal.dishes ? Array.from(new Set(currentMeal.dishes.map((d) => d.category))) : [])];
+  // 本餐所有菜色 = 額外加入的（招牌菜／合菜）+ 原有菜單
+  const mealDishes: DishItem[] = [
+    ...(EXTRA_DISHES[currentMeal.dateKey] || []),
+    ...(currentMeal.dishes || [])
+  ];
 
-  const filteredDishes = (currentMeal.dishes || []).filter((d) => {
+  // 分類分頁：先放「招牌菜、合菜」，再來是「全部」與其他分類
+  const dataCategories = Array.from(new Set(mealDishes.map((d) => d.category)));
+  const pinnedCategories = PINNED_CATEGORIES.filter((c) => dataCategories.includes(c));
+  const otherCategories = dataCategories.filter((c) => !pinnedCategories.includes(c));
+  const categories = [...pinnedCategories, '全部', ...otherCategories];
+
+  const filteredDishes = mealDishes.filter((d) => {
     const matchesCat = activeCategory === '全部' || d.category === activeCategory;
     const matchesSearch = !searchTerm || d.name.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesCat && matchesSearch;
@@ -158,6 +175,8 @@ export const OrderView: React.FC<Props> = ({
   const serviceRate = (currentMeal.serviceChargePercent || 0) / 100;
   const grandTotal = Math.round(totalSubtotal * (1 + serviceRate));
 
+  const extraNote = EXTRA_MEAL_NOTES[currentMeal.dateKey];
+
   return (
     <div>
       {/* 餐廳切換選單 Tab */}
@@ -176,7 +195,7 @@ export const OrderView: React.FC<Props> = ({
               key={meal.id}
               onClick={() => {
                 onSelectMealKey(meal.dateKey);
-                setActiveCategory('全部');
+                setActiveCategory(getDefaultCategory(meal.dateKey));
                 setSearchTerm('');
               }}
               style={{
@@ -242,6 +261,23 @@ export const OrderView: React.FC<Props> = ({
         <p style={{ fontSize: '0.85rem', color: '#475569', marginTop: '8px', lineHeight: 1.4 }}>
           {currentMeal.note}
         </p>
+
+        {extraNote && (
+          <p
+            style={{
+              fontSize: '0.85rem',
+              color: '#92400e',
+              background: '#fffbeb',
+              border: '1px solid #fde68a',
+              borderRadius: '8px',
+              padding: '8px 10px',
+              marginTop: '8px',
+              lineHeight: 1.4
+            }}
+          >
+            {extraNote}
+          </p>
+        )}
 
         {/* 目前身分提示 */}
         <div
@@ -557,26 +593,32 @@ export const OrderView: React.FC<Props> = ({
               marginBottom: '14px'
             }}
           >
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setActiveCategory(cat)}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: '16px',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  whiteSpace: 'nowrap',
-                  border: 'none',
-                  background: activeCategory === cat ? '#2563eb' : '#e2e8f0',
-                  color: activeCategory === cat ? 'white' : '#475569',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s'
-                }}
-              >
-                {cat}
-              </button>
-            ))}
+            {categories.map((cat) => {
+              const isPinned = pinnedCategories.includes(cat);
+              const isActive = activeCategory === cat;
+              return (
+                <button
+                  key={cat}
+                  onClick={() => setActiveCategory(cat)}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '16px',
+                    fontSize: '0.8rem',
+                    fontWeight: isPinned ? 700 : 600,
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                    border: isPinned && !isActive ? '1px solid #f59e0b' : '1px solid transparent',
+                    background: isActive ? '#2563eb' : isPinned ? '#fffbeb' : '#e2e8f0',
+                    color: isActive ? 'white' : isPinned ? '#b45309' : '#475569',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  {isPinned ? '★ ' : ''}
+                  {cat}
+                </button>
+              );
+            })}
           </div>
 
           {/* 菜品清單列表 */}

@@ -1,4 +1,5 @@
 import { OrderItem, getOrders, saveOrders } from '../store/orderStore';
+import { MEALS_DATA } from '../data/tripData';
 
 const STORAGE_SYNC_CONFIG_KEY = 'family_trip_sync_config_v1';
 const STORAGE_SYNC_ENABLED_KEY = 'family_trip_sync_enabled_v1';
@@ -12,8 +13,86 @@ const CANDIDATE_URLS: string[] = [
   `https://${DB_NAME}.europe-west1.firebasedatabase.app` // 比利時
 ];
 
-// 也可在 Vercel 設定環境變數 VITE_FIREBASE_DB_URL 覆蓋預設網址
-const ENV_URL: string = ((import.meta.env.VITE_FIREBASE_DB_URL as string | undefined) || '').trim();
+// ---- 安全：網址、房間密鑰、資料內容驗證 ----
+
+// 只允許 https 且網域為 Firebase Realtime Database，避免被誘導把訂單送到第三方
+export function isSafeDbUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw.trim());
+    if (u.protocol !== 'https:') return false;
+    if (u.username || u.password) return false;
+    const h = u.hostname.toLowerCase();
+    return h.endsWith('.firebaseio.com') || h.endsWith('.firebasedatabase.app');
+  } catch {
+    return false;
+  }
+}
+
+const ROOM_KEY_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+export function isValidRoomKey(key: string): boolean {
+  return ROOM_KEY_PATTERN.test(key);
+}
+
+const MAX_ORDERS = 500;
+const MAX_SHARE_CODE_LENGTH = 100_000;
+const VALID_MEAL_KEYS = new Set<string>(MEALS_DATA.map((m) => m.dateKey));
+
+function cleanStr(v: unknown, max: number): string | null {
+  if (typeof v !== 'string') return null;
+  const s = v.trim();
+  if (!s || s.length > max) return null;
+  return s;
+}
+
+// 驗證並正規化訂單清單：不合法的項目直接丟棄，避免惡意/損壞資料造成當機或金額被竄改
+export function sanitizeOrders(input: unknown): OrderItem[] {
+  let list: unknown[] = [];
+  if (Array.isArray(input)) {
+    list = input;
+  } else if (input && typeof input === 'object') {
+    list = Object.values(input as Record<string, unknown>);
+  }
+
+  const result: OrderItem[] = [];
+  const seenIds = new Set<string>();
+
+  for (const raw of list) {
+    if (result.length >= MAX_ORDERS) break;
+    if (!raw || typeof raw !== 'object') continue;
+    const o = raw as Record<string, unknown>;
+
+    const id = cleanStr(o.id, 64);
+    const mealKey = cleanStr(o.mealKey, 32);
+    const userName = cleanStr(o.userName, 40);
+    const itemId = cleanStr(o.itemId, 64);
+    const itemName = cleanStr(o.itemName, 100);
+    if (!id || !mealKey || !userName || !itemId || !itemName) continue;
+    if (!VALID_MEAL_KEYS.has(mealKey)) continue;
+    if (seenIds.has(id)) continue;
+
+    const price = o.price;
+    const quantity = o.quantity;
+    const timestamp = o.timestamp;
+    if (typeof price !== 'number' || !Number.isFinite(price) || price < 0 || price > 100000) continue;
+    if (typeof quantity !== 'number' || !Number.isInteger(quantity) || quantity < 1 || quantity > 99) continue;
+    const ts = typeof timestamp === 'number' && Number.isFinite(timestamp) ? timestamp : Date.now();
+
+    let details: string | undefined;
+    if (o.details !== undefined && o.details !== null && o.details !== '') {
+      const d = cleanStr(o.details, 300);
+      if (!d) continue;
+      details = d;
+    }
+
+    seenIds.add(id);
+    result.push({ id, mealKey, userName, itemId, itemName, price, quantity, details, timestamp: ts });
+  }
+  return result;
+}
+
+// 也可在 Vercel 設定環境變數 VITE_FIREBASE_DB_URL 覆蓋預設網址（同樣需通過網址驗證）
+const RAW_ENV_URL: string = ((import.meta.env.VITE_FIREBASE_DB_URL as string | undefined) || '').trim();
+const ENV_URL: string = RAW_ENV_URL && isSafeDbUrl(RAW_ENV_URL) ? RAW_ENV_URL : '';
 const DEFAULT_FIREBASE_URL: string = ENV_URL || CANDIDATE_URLS[0];
 
 const DEFAULT_ROOM_KEY = '2026-family-tour';
@@ -64,10 +143,12 @@ export function getSyncConfig(): SyncConfig {
     const raw = localStorage.getItem(STORAGE_SYNC_CONFIG_KEY);
     if (raw) {
       const saved = JSON.parse(raw) as SyncConfig;
+      const savedUrl = typeof saved.firebaseDatabaseUrl === 'string' ? saved.firebaseDatabaseUrl : '';
+      const savedRoom = typeof saved.roomKey === 'string' ? saved.roomKey : '';
       return {
-        // 本機沒填網址時，自動套用預設網址
-        firebaseDatabaseUrl: saved.firebaseDatabaseUrl || DEFAULT_FIREBASE_URL,
-        roomKey: saved.roomKey || DEFAULT_ROOM_KEY
+        // 本機沒填、或網址不合法時，自動套用預設網址
+        firebaseDatabaseUrl: savedUrl && isSafeDbUrl(savedUrl) ? savedUrl : DEFAULT_FIREBASE_URL,
+        roomKey: savedRoom && isValidRoomKey(savedRoom) ? savedRoom : DEFAULT_ROOM_KEY
       };
     }
   } catch {
@@ -79,14 +160,25 @@ export function getSyncConfig(): SyncConfig {
   };
 }
 
-export function saveSyncConfig(cfg: SyncConfig): void {
+// 回傳 null 表示儲存成功，否則回傳錯誤訊息
+export function saveSyncConfig(cfg: SyncConfig): string | null {
+  const url = (cfg.firebaseDatabaseUrl || '').trim();
+  if (url && !isSafeDbUrl(url)) {
+    return '資料庫網址必須是 https 開頭的 Firebase 網址（firebaseio.com 或 firebasedatabase.app）';
+  }
+  const room = (cfg.roomKey || '').trim();
+  if (!isValidRoomKey(room)) {
+    return '房間密鑰只能使用英數字、底線、連字號，長度 1–64 字';
+  }
   try {
-    localStorage.setItem(STORAGE_SYNC_CONFIG_KEY, JSON.stringify(cfg));
+    localStorage.setItem(STORAGE_SYNC_CONFIG_KEY, JSON.stringify({ firebaseDatabaseUrl: url, roomKey: room }));
     resolvedBase = null;
     failCount = 0;
     window.dispatchEvent(new Event('sync_config_changed'));
+    return null;
   } catch (err) {
     console.error('Failed to save sync config', err);
+    return '儲存設定失敗';
   }
 }
 
@@ -117,9 +209,9 @@ async function resolveBaseUrl(): Promise<string | null> {
 
   const cfg = getSyncConfig();
   const configured = (cfg.firebaseDatabaseUrl || '').trim().replace(/\/$/, '');
-  if (!configured) return null;
+  if (!configured || !isSafeDbUrl(configured)) return null;
 
-  // 使用者自訂了其他網址：直接使用，不做偵測
+  // 使用者自訂了其他（已通過驗證的）Firebase 網址：直接使用，不做偵測
   if (!CANDIDATE_URLS.includes(configured) && configured !== ENV_URL.replace(/\/$/, '')) {
     resolvedBase = configured;
     return resolvedBase;
@@ -167,59 +259,72 @@ export function exportOrdersShareCode(userName?: string): string {
   return `TOUR2026:${b64}`;
 }
 
-// 匯入並合併點餐碼
+// 匯入並合併點餐碼（所有欄位皆經驗證，不信任貼上的內容）
 export function importOrdersShareCode(code: string): { success: boolean; count: number; user: string; message: string } {
+  const fail = (message: string) => ({ success: false, count: 0, user: '', message });
   try {
     const trimmed = code.trim();
+    if (trimmed.length > MAX_SHARE_CODE_LENGTH) return fail('點餐碼過長，已拒絕匯入');
+
     const prefix = 'TOUR2026:';
     const rawCode = trimmed.includes(prefix) ? trimmed.split(prefix)[1] : trimmed;
     const jsonStr = decodeURIComponent(atob(rawCode));
     const data = JSON.parse(jsonStr);
 
-    if (!data.items || !Array.isArray(data.items)) {
-      return { success: false, count: 0, user: '', message: '點餐碼格式不正確' };
+    if (!data || typeof data !== 'object' || !Array.isArray(data.items)) {
+      return fail('點餐碼格式不正確');
     }
+
+    // 轉成標準訂單格式後統一驗證
+    const candidates = (data.items as unknown[])
+      .filter((x): x is Record<string, unknown> => !!x && typeof x === 'object')
+      .map((item, idx) => ({
+        id: 'ord_imp_' + Date.now().toString(36) + '_' + idx + '_' + Math.random().toString(36).substring(2, 6),
+        mealKey: item.m,
+        userName: item.u,
+        itemId: item.i,
+        itemName: item.n,
+        price: item.p,
+        quantity: item.q,
+        details: item.d || undefined,
+        timestamp: Date.now()
+      }));
+    const incoming = sanitizeOrders(candidates);
+
+    if (incoming.length === 0) return fail('點餐碼內沒有有效的點餐項目');
 
     const currentOrders = getOrders();
     let importedCount = 0;
 
-    data.items.forEach((item: any) => {
+    for (const item of incoming) {
       // 尋找相同餐別、相同成員、相同餐點的項目進行合併或新增
       const existing = currentOrders.find(
         (o) =>
-          o.mealKey === item.m &&
-          o.userName === item.u &&
-          o.itemId === item.i &&
-          (o.details || '') === (item.d || '')
+          o.mealKey === item.mealKey &&
+          o.userName === item.userName &&
+          o.itemId === item.itemId &&
+          (o.details || '') === (item.details || '')
       );
 
       if (existing) {
-        existing.quantity = Math.max(existing.quantity, item.q);
+        existing.quantity = Math.max(existing.quantity, item.quantity);
       } else {
-        currentOrders.push({
-          id: 'ord_imp_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6),
-          mealKey: item.m,
-          userName: item.u,
-          itemId: item.i,
-          itemName: item.n,
-          price: item.p,
-          quantity: item.q,
-          details: item.d || undefined,
-          timestamp: Date.now()
-        });
+        if (currentOrders.length >= MAX_ORDERS) break;
+        currentOrders.push(item);
       }
       importedCount++;
-    });
+    }
 
     saveOrders(currentOrders);
+    const who = typeof data.u === 'string' && data.u !== 'ALL' ? data.u.slice(0, 40) : '全體';
     return {
       success: true,
       count: importedCount,
-      user: data.u === 'ALL' ? '全體' : data.u,
-      message: `成功合併 ${data.u === 'ALL' ? '全體' : data.u} 的 ${importedCount} 項點餐！`
+      user: who,
+      message: `成功合併 ${who} 的 ${importedCount} 項點餐！`
     };
-  } catch (err) {
-    return { success: false, count: 0, user: '', message: '解析點餐碼失敗，請確認代碼是否完整' };
+  } catch {
+    return fail('解析點餐碼失敗，請確認代碼是否完整');
   }
 }
 
@@ -251,11 +356,13 @@ export function startCloudSyncLoop(): () => void {
         markFailure();
         return;
       }
-      const remoteOrders: OrderItem[] | null = await res.json();
+      const remoteRaw: unknown = await res.json();
       markSuccess();
       // 抓取期間若使用者又有新操作，這份雲端資料已過期，直接丟棄
       if (hasPendingLocalChanges() || inFlight > 0) return;
-      if (Array.isArray(remoteOrders)) {
+      if (remoteRaw !== null && remoteRaw !== undefined) {
+        // 雲端資料不可信：先驗證與正規化再套用
+        const remoteOrders = sanitizeOrders(remoteRaw);
         const local = getOrders();
         if (JSON.stringify(remoteOrders) !== JSON.stringify(local)) {
           // 套用雲端資料，不回寫雲端

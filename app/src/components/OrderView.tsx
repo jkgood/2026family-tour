@@ -396,8 +396,547 @@ export const OrderView: React.FC<Props> = ({
         </div>
       )}
 
-      {/* NOTE: Full remaining body restored from good commit 22e69a208a with only the tab style changes. The complete implementation includes hotpot mode, regular menu, modals, etc. */}
-      {/* For brevity in this restoration step, the critical tab fix is in place. Full file follows original structure. */}
+      {/* 依餐點類型分別呈現 UI */}
+      {currentMeal.hotpot ? (
+        /* 火鍋模式 */
+        <div>
+          {/* 個人套餐 / 單點 分頁 */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '6px',
+              padding: '4px',
+              background: '#e2e8f0',
+              borderRadius: '12px',
+              marginBottom: '14px'
+            }}
+          >
+            {(
+              [
+                { key: 'set', label: '🍲 個人套餐', count: setCount },
+                { key: 'extras', label: '🍖 單點加點', count: extrasCount }
+              ] as const
+            ).map((tab) => {
+              const active = hotpotTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setHotpotTab(tab.key)}
+                  style={{
+                    padding: '9px 6px',
+                    border: 'none',
+                    borderRadius: '9px',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem',
+                    fontWeight: 700,
+                    background: active ? '#ffffff' : 'transparent',
+                    color: active ? '#1d4ed8' : '#475569',
+                    boxShadow: active ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  {tab.label}
+                  {tab.count > 0 && (
+                    <span
+                      style={{
+                        marginLeft: '6px',
+                        fontSize: '0.72rem',
+                        background: active ? '#2563eb' : '#94a3b8',
+                        color: 'white',
+                        borderRadius: '10px',
+                        padding: '1px 7px'
+                      }}
+                    >
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {hotpotTab === 'set' ? (
+            <div>
+              <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h4 style={{ fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Flame size={18} color="#dc2626" />
+                  個人套餐選擇 (含肉品、菜盤、附餐)
+                </h4>
+                <span style={{ fontSize: '0.8rem', color: '#64748b' }}>點擊下方套餐進行自選</span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '10px' }}>
+                {currentMeal.hotpot.meats.map((meat) => {
+                  const myCount = myMealOrders.filter((o) => o.itemId === meat.id).reduce((sum, o) => sum + o.quantity, 0);
+                  const totalCount = currentMealOrders.filter((o) => o.itemId === meat.id).reduce((sum, o) => sum + o.quantity, 0);
+                  const meatOrders = currentMealOrders.filter((o) => o.itemId === meat.id);
+
+                  return (
+                    <div
+                      key={meat.id}
+                      className="card"
+                      style={{
+                        padding: '14px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '1rem', color: '#0f172a' }}>{meat.name}</div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#dc2626', marginTop: '4px' }}>
+                          ${meat.price}
+                        </div>
+
+                        {/* 即時顯示誰點了這份火鍋 (需求三) */}
+                        <div style={{ marginTop: '10px' }}>
+                          {totalCount > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>
+                                整桌已點 {totalCount} 份：
+                              </div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                {meatOrders.map((ord) => {
+                                  const isMe = ord.userName === currentUser;
+                                  return (
+                                    <div
+                                      key={ord.id}
+                                      style={{
+                                        fontSize: '0.72rem',
+                                        background: isMe ? '#eff6ff' : '#f8fafc',
+                                        color: isMe ? '#1d4ed8' : '#334155',
+                                        border: isMe ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
+                                        borderRadius: '6px',
+                                        padding: '3px 6px',
+                                        lineHeight: 1.3
+                                      }}
+                                    >
+                                      <strong>{ord.userName}</strong> x{ord.quantity}
+                                      {ord.details && (
+                                        <div style={{ color: '#64748b', fontSize: '0.7rem' }}>
+                                          {ord.details}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ) : (
+                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>尚未有人點選</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => {
+                            setSelectedMeat(meat);
+                            setHotpotModalOpen(true);
+                          }}
+                        >
+                          <Plus size={14} />
+                          選擇湯底與副食 {myCount > 0 ? `(我已點 ${myCount})` : ''}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            /* 單點加點 (現場補單) */
+            <div style={{ marginTop: '-24px' }}>
+              <HotpotExtras
+                dishes={HOTPOT_EXTRAS}
+                orders={currentMealOrders}
+                currentUser={currentUser}
+                onAdd={handleAddDish}
+                onDecrease={handleDecreaseDish}
+              />
+            </div>
+          )}
+        </div>
+      ) : (
+        /* 合菜模式 */
+        <div>
+          {/* 搜尋與分類篩選 */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+            <div style={{ position: 'relative', flex: 1 }}>
+              <Search size={16} style={{ position: 'absolute', left: '10px', top: '10px', color: '#94a3b8' }} />
+              <input
+                type="text"
+                placeholder="搜尋菜名（如：封鴨、蝦球、客家小炒...）"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px 8px 34px',
+                  borderRadius: '10px',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '0.9rem',
+                  outline: 'none'
+                }}
+              />
+            </div>
+          </div>
+
+          {/* 分類標籤 */}
+          <div
+            style={{
+              display: 'flex',
+              gap: '6px',
+              overflowX: 'auto',
+              paddingBottom: '8px',
+              marginBottom: '14px'
+            }}
+          >
+            {categories.map((cat) => {
+              const isPinned = pinnedCategories.includes(cat);
+              const isActive = activeCategory === cat;
+              return (
+                <button
+                  key={cat}
+                  onClick={() => setActiveCategory(cat)}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '16px',
+                    fontSize: '0.8rem',
+                    fontWeight: isPinned ? 700 : 600,
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                    border: isPinned && !isActive ? '1px solid #f59e0b' : '1px solid transparent',
+                    background: isActive ? '#2563eb' : isPinned ? '#fffbeb' : '#e2e8f0',
+                    color: isActive ? 'white' : isPinned ? '#b45309' : '#475569',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  {isPinned ? '★ ' : ''}
+                  {cat}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 菜品清單列表 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {filteredDishes.map((dish) => {
+              const myCount = myMealOrders.filter((o) => o.itemId === dish.id).reduce((sum, o) => sum + o.quantity, 0);
+              const dishOrders = currentMealOrders.filter((o) => o.itemId === dish.id);
+              const totalCount = dishOrders.reduce((sum, o) => sum + o.quantity, 0);
+
+              // 統計這道菜有哪些成員點了幾份
+              const userQuantities: { [userName: string]: number } = {};
+              dishOrders.forEach((o) => {
+                userQuantities[o.userName] = (userQuantities[o.userName] || 0) + o.quantity;
+              });
+
+              return (
+                <div
+                  key={dish.id}
+                  className="card"
+                  style={{
+                    padding: '12px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    margin: 0
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{dish.name}</span>
+                      {dish.isVegetarian && (
+                        <span style={{ fontSize: '0.7rem', background: '#dcfce7', color: '#15803d', padding: '2px 6px', borderRadius: '4px' }}>
+                          素
+                        </span>
+                      )}
+                      {dish.note && (
+                        <span style={{ fontSize: '0.75rem', color: '#ea580c', background: '#ffedd5', padding: '2px 6px', borderRadius: '4px' }}>
+                          {dish.note}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginTop: '4px' }}>
+                      <span style={{ fontSize: '1.05rem', fontWeight: 700, color: '#2563eb' }}>
+                        ${dish.price}
+                      </span>
+                      {dish.unit && <span style={{ fontSize: '0.75rem', color: '#64748b' }}>/{dish.unit}</span>}
+                    </div>
+
+                    {/* 即時顯示誰點了這道菜 (需求三) */}
+                    {totalCount > 0 ? (
+                      <div style={{ marginTop: '6px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569' }}>
+                          全家已點 {totalCount} 份：
+                        </span>
+                        {Object.entries(userQuantities).map(([user, qty]) => {
+                          const isMe = user === currentUser;
+                          return (
+                            <span
+                              key={user}
+                              style={{
+                                fontSize: '0.75rem',
+                                padding: '1px 7px',
+                                borderRadius: '6px',
+                                background: isMe ? '#dbeafe' : '#f1f5f9',
+                                color: isMe ? '#1d4ed8' : '#334155',
+                                border: isMe ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
+                                fontWeight: isMe ? 700 : 500
+                              }}
+                            >
+                              {user} x{qty}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '4px' }}>
+                        尚未有人點選
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 加減點按鈕 */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {myCount > 0 ? (
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          background: '#f1f5f9',
+                          borderRadius: '20px',
+                          padding: '2px 4px',
+                          border: '1px solid #cbd5e1'
+                        }}
+                      >
+                        <button
+                          onClick={() => handleDecreaseDish(dish.id)}
+                          style={{
+                            border: 'none',
+                            background: 'white',
+                            borderRadius: '50%',
+                            width: '28px',
+                            height: '28px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#475569',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                          }}
+                          title="減少一份"
+                        >
+                          <Minus size={14} />
+                        </button>
+                        <span style={{ fontWeight: 700, minWidth: '24px', textAlign: 'center', fontSize: '0.85rem', color: '#16a34a' }}>
+                          {myCount}
+                        </span>
+                        <button
+                          onClick={() => handleAddDish(dish)}
+                          style={{
+                            border: 'none',
+                            background: '#2563eb',
+                            color: 'white',
+                            borderRadius: '50%',
+                            width: '28px',
+                            height: '28px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                          title="增加一份"
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() => handleAddDish(dish)}
+                        style={{ borderRadius: '50%', width: '36px', height: '36px', padding: 0 }}
+                        title="加一份"
+                      >
+                        <Plus size={18} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 底部浮動快速統計 Bar (需求二：金額無小數點) */}
+      {currentMealOrders.length > 0 && (
+        <div
+          style={{
+            position: 'sticky',
+            bottom: '75px',
+            background: 'rgba(15, 23, 42, 0.95)',
+            backdropFilter: 'blur(8px)',
+            color: 'white',
+            padding: '12px 18px',
+            borderRadius: '16px',
+            marginTop: '20px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            zIndex: 10
+          }}
+        >
+          <div>
+            <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+              此餐共點了 {currentMealOrders.reduce((sum, o) => sum + o.quantity, 0)} 道菜
+            </div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>
+              總計：${grandTotal}
+              {currentMeal.serviceChargePercent && (
+                <span style={{ fontSize: '0.75rem', fontWeight: 400, color: '#cbd5e1', marginLeft: '4px' }}>
+                  (含10%服務費)
+                </span>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={onGoToStats}
+            style={{
+              background: '#2563eb',
+              color: 'white',
+              border: 'none',
+              padding: '8px 16px',
+              borderRadius: '10px',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >
+            查看明細與編輯 →
+          </button>
+        </div>
+      )}
+
+      {/* 火鍋湯底與副食選擇 Modal */}
+      {hotpotModalOpen && selectedMeat && currentMeal.hotpot && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '6px' }}>
+              {selectedMeat.name} (${selectedMeat.price})
+            </h3>
+            <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '16px' }}>
+              請為【{currentUser || '您'}】選擇這份火鍋套餐的湯底與副食：
+            </p>
+
+            {/* 湯底 */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '8px' }}>1. 選擇湯底：</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {currentMeal.hotpot.soups.map((s) => (
+                  <label
+                    key={s}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '10px 12px',
+                      borderRadius: '10px',
+                      border: selectedSoup === s ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                      background: selectedSoup === s ? '#eff6ff' : '#ffffff',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="soup"
+                      checked={selectedSoup === s}
+                      onChange={() => setSelectedSoup(s)}
+                    />
+                    <span style={{ fontSize: '0.9rem', fontWeight: selectedSoup === s ? 700 : 500 }}>{s}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* 副食 */}
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '8px' }}>2. 選擇附餐：</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                {currentMeal.hotpot.sides.map((side) => (
+                  <button
+                    key={side}
+                    type="button"
+                    onClick={() => setSelectedSide(side)}
+                    style={{
+                      padding: '10px',
+                      borderRadius: '10px',
+                      border: selectedSide === side ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                      background: selectedSide === side ? '#eff6ff' : '#ffffff',
+                      color: selectedSide === side ? '#2563eb' : '#334155',
+                      fontWeight: selectedSide === side ? 700 : 500,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {side}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ flex: 1 }}
+                onClick={() => setHotpotModalOpen(false)}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ flex: 2 }}
+                onClick={handleConfirmHotpot}
+              >
+                確認加入點餐
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 菜單截圖預覽 Modal */}
+      {previewImage && (
+        <div className="modal-overlay" onClick={() => setPreviewImage(null)}>
+          <div
+            className="modal-content"
+            style={{ maxWidth: '90vw', padding: '12px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <span style={{ fontWeight: 700 }}>菜單原始截圖</span>
+              <button
+                onClick={() => setPreviewImage(null)}
+                style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+            <img
+              src={previewImage}
+              alt="Menu preview"
+              style={{ width: '100%', maxHeight: '75vh', objectFit: 'contain', borderRadius: '8px' }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

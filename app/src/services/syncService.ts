@@ -29,6 +29,15 @@ export type SyncStatus = 'unknown' | 'ok' | 'error';
 let syncStatus: SyncStatus = 'unknown';
 let failCount = 0;
 
+// ---- 本機變更追蹤：避免輪詢用舊的雲端資料覆蓋尚未上傳的本機點餐 ----
+let localVersion = 0; // 每次本機推送 +1
+let syncedVersion = 0; // 最近一次確認成功上傳的版本
+let inFlight = 0; // 進行中的推送數
+
+function hasPendingLocalChanges(): boolean {
+  return syncedVersion !== localVersion;
+}
+
 export function getSyncStatus(): SyncStatus {
   return syncStatus;
 }
@@ -214,7 +223,7 @@ export function importOrdersShareCode(code: string): { success: boolean; count: 
   }
 }
 
-// 雲端即時同步（若設定了 Firebase Database URL 則使用 REST SSE / polling 實時雙向更新）
+// 雲端即時同步（若設定了 Firebase Database URL 則使用 REST polling 雙向更新）
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 export function startCloudSyncLoop(): () => void {
@@ -222,6 +231,12 @@ export function startCloudSyncLoop(): () => void {
     if (!isCloudSyncEnabled()) return;
     const cfg = getSyncConfig();
     if (!cfg.firebaseDatabaseUrl) return;
+
+    // 本機有尚未上傳的變更：先重試上傳，不要用雲端舊資料覆蓋
+    if (hasPendingLocalChanges()) {
+      if (inFlight === 0) await pushOrdersToCloud(getOrders());
+      return;
+    }
 
     const base = await resolveBaseUrl();
     if (!base) {
@@ -238,12 +253,13 @@ export function startCloudSyncLoop(): () => void {
       }
       const remoteOrders: OrderItem[] | null = await res.json();
       markSuccess();
+      // 抓取期間若使用者又有新操作，這份雲端資料已過期，直接丟棄
+      if (hasPendingLocalChanges() || inFlight > 0) return;
       if (Array.isArray(remoteOrders)) {
-        // 合併或覆蓋
         const local = getOrders();
-        // 簡單比較長度或時間戳
         if (JSON.stringify(remoteOrders) !== JSON.stringify(local)) {
-          saveOrders(remoteOrders);
+          // 套用雲端資料，不回寫雲端
+          saveOrders(remoteOrders, false);
         }
       }
     } catch {
@@ -266,14 +282,16 @@ export async function pushOrdersToCloud(orders: OrderItem[]): Promise<boolean> {
   const cfg = getSyncConfig();
   if (!cfg.firebaseDatabaseUrl) return false;
 
-  const base = await resolveBaseUrl();
-  if (!base) {
-    markFailure();
-    return false;
-  }
-  const url = `${base}/tours/${encodeURIComponent(cfg.roomKey)}/orders.json`;
-
+  const version = ++localVersion;
+  inFlight += 1;
   try {
+    const base = await resolveBaseUrl();
+    if (!base) {
+      markFailure();
+      return false;
+    }
+    const url = `${base}/tours/${encodeURIComponent(cfg.roomKey)}/orders.json`;
+
     const res = await fetch(url, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -281,6 +299,8 @@ export async function pushOrdersToCloud(orders: OrderItem[]): Promise<boolean> {
     });
     if (res.ok) {
       markSuccess();
+      // 只有最新一次推送成功才算全部同步完成
+      if (version === localVersion) syncedVersion = version;
     } else {
       markFailure();
     }
@@ -288,5 +308,7 @@ export async function pushOrdersToCloud(orders: OrderItem[]): Promise<boolean> {
   } catch {
     markFailure();
     return false;
+  } finally {
+    inFlight -= 1;
   }
 }

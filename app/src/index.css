@@ -26,6 +26,7 @@ body {
   color: var(--text);
   line-height: 1.5;
   padding-bottom: 96px;
+  overflow-x: hidden;
 }
 
 /* Container */
@@ -82,7 +83,11 @@ body {
   background: rgba(255, 255, 255, 0.3);
 }
 
-/* Tabs */
+/* =========================================
+   底部導覽列：三個按鈕固定等分螢幕寬度，
+   字和圖示的大小同時受「字級設定」與「螢幕寬度」限制，
+   任何字級、任何手機寬度都不會跑版或超出畫面。
+   ========================================= */
 .bottom-nav {
   position: fixed;
   bottom: 0;
@@ -90,33 +95,46 @@ body {
   right: 0;
   background: #ffffff;
   border-top: 1px solid var(--border);
-  display: flex;
-  justify-content: space-around;
-  padding: 8px 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 6px 8px;
   z-index: 100;
   box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
 }
 
-/* 底部導覽列字級有上限，避免放大後蓋住內容 */
 .nav-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
   background: none;
   border: none;
   color: var(--text-muted);
-  font-size: clamp(12px, 0.75rem, 14px);
+  /* 隨字級放大，但每個字最多只占螢幕寬度的 4.6%，4 個字不會超出按鈕 */
+  font-size: clamp(12px, 0.8rem, 4.6vw);
+  line-height: 1.2;
   font-weight: 500;
   cursor: pointer;
-  padding: 6px 12px;
+  padding: 4px 4px;
   border-radius: 12px;
   transition: all 0.2s;
 }
 
+.nav-item span {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .nav-item svg {
-  width: clamp(22px, 1.4rem, 26px);
-  height: clamp(22px, 1.4rem, 26px);
+  flex-shrink: 0;
+  width: clamp(22px, 1.4rem, 8vw);
+  height: clamp(22px, 1.4rem, 8vw);
 }
 
 .nav-item.active {
@@ -257,6 +275,7 @@ body {
   bottom: 84px;
   left: 50%;
   transform: translateX(-50%);
+  max-width: 92vw;
   background: rgba(15, 23, 42, 0.92);
   color: white;
   padding: 10px 20px;

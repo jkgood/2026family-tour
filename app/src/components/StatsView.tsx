@@ -15,11 +15,9 @@ import {
   removeOrder,
   removeDishOrders,
   clearMealOrders,
-  OrderItem,
-  getLocalUser
+  OrderItem
 } from '../store/orderStore';
 import { showToast } from './Toast';
-import { SyncModal } from './SyncModal';
 
 interface Props {
   selectedMealKey: string;
@@ -33,7 +31,6 @@ export const StatsView: React.FC<Props> = ({
   onGoToOrder
 }) => {
   const [copied, setCopied] = useState(false);
-  const [syncModalOpen, setSyncModalOpen] = useState(false);
   const currentMeal = MEALS_DATA.find((m) => m.dateKey === selectedMealKey) || MEALS_DATA[0];
   const allOrders = useOrders();
   const mealOrders = allOrders.filter((o) => o.mealKey === selectedMealKey);
@@ -214,7 +211,7 @@ export const StatsView: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* 複製、同步與重設操作列 */}
+        {/* 複製與重設操作列 */}
         <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button
@@ -224,20 +221,6 @@ export const StatsView: React.FC<Props> = ({
             >
               {copied ? <Check size={16} /> : <Share2 size={16} />}
               {copied ? '已複製到剪貼簿！' : '複製菜單清單傳 LINE'}
-            </button>
-            <button
-              onClick={() => setSyncModalOpen(true)}
-              className="btn btn-outline"
-              style={{
-                fontSize: '0.85rem',
-                padding: '8px 12px',
-                background: 'rgba(255, 255, 255, 0.1)',
-                borderColor: 'rgba(255, 255, 255, 0.2)',
-                color: 'white'
-              }}
-              title="雲端同步與匯入家人點餐碼"
-            >
-              點餐碼/同步
             </button>
             {mealOrders.length > 0 && (
               <button
@@ -480,13 +463,6 @@ export const StatsView: React.FC<Props> = ({
             })}
           </div>
         </div>
-      )}
-
-      {syncModalOpen && (
-        <SyncModal
-          currentUser={getLocalUser()}
-          onClose={() => setSyncModalOpen(false)}
-        />
       )}
     </div>
   );

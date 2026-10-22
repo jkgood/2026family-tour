@@ -67,10 +67,12 @@ function notify() {
 }
 
 export function getOrders(): OrderItem[] {
-  return [...globalOrders];
+  // 深拷貝每筆訂單，避免呼叫端直接修改 globalOrders 內的物件
+  return globalOrders.map((o) => ({ ...o }));
 }
 
-export function saveOrders(orders: OrderItem[]): void {
+// pushToCloud=false 用於套用雲端資料時，避免把剛下載的資料又回寫雲端
+export function saveOrders(orders: OrderItem[], pushToCloud = true): void {
   globalOrders = [...orders];
   try {
     localStorage.setItem(STORAGE_ORDERS_KEY, JSON.stringify(globalOrders));
@@ -79,7 +81,9 @@ export function saveOrders(orders: OrderItem[]): void {
   }
   notify();
   // 若有開啟雲端同步，非同步推送至雲端
-  pushOrdersToCloud(globalOrders).catch(() => {});
+  if (pushToCloud) {
+    pushOrdersToCloud(globalOrders).catch(() => {});
+  }
 }
 
 export function useOrders(): OrderItem[] {

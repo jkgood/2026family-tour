@@ -1,0 +1,29 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "tours": {
+      "$room": {
+        ".validate": "$room.matches(/^[A-Za-z0-9_-]{1,64}$/)",
+        "orders": {
+          ".read": true,
+          ".write": true,
+          "$i": {
+            ".validate": "$i.matches(/^[0-9]{1,3}$/) && newData.hasChildren(['id','mealKey','userName','itemId','itemName','price','quantity','timestamp'])",
+            "id": { ".validate": "newData.isString() && newData.val().length <= 64" },
+            "mealKey": { ".validate": "newData.isString() && newData.val().length <= 32" },
+            "userName": { ".validate": "newData.isString() && newData.val().length <= 40" },
+            "itemId": { ".validate": "newData.isString() && newData.val().length <= 64" },
+            "itemName": { ".validate": "newData.isString() && newData.val().length <= 100" },
+            "price": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000" },
+            "quantity": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 99" },
+            "timestamp": { ".validate": "newData.isNumber()" },
+            "details": { ".validate": "newData.isString() && newData.val().length <= 300" },
+            "$other": { ".validate": false }
+          }
+        },
+        "$other": { ".validate": false }
+      }
+    }
+  }
+}
